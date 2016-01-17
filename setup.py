@@ -1,14 +1,12 @@
-import os.path
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from setuptools import setup, find_packages
 from noopy import VERSION
 
+print find_packages()
 
 setup(
         name='noopy',
-        packages=['noopy'],
+        packages=find_packages(),
+        include_package_data=True,
         version=VERSION,
         description=('A no-ops(serverless) oriented web framework'
                      'using AWS lambda & API Gateway'),
