@@ -20,4 +20,6 @@ def test_endpoints_added():
     from noopy.endpoint import Endpoint
 
     endpoints = Endpoint.endpoints
-    assert set(endpoints.keys()) == {('/foo', methods.GET)}
+    foo_endpoint = Endpoint('/foo', methods.GET)
+    assert set(endpoints.keys()) == {foo_endpoint}
+    assert endpoints[foo_endpoint] == sample_view
