@@ -4,6 +4,11 @@ import re
 class Resource(object):
     resources = {}
 
+    def __new__(cls, path):
+        if path in cls.resources:
+            return cls.resources[path]
+        return super(Resource, cls).__new__(cls, path)
+
     def __init__(self, path):
         self.path = self._validate_path(path)
         self.children = []
