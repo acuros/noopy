@@ -1,9 +1,13 @@
 import glob
 import os
-import shutil
+from string import Template
 
 import noopy
 from noopy.admin import BaseCommand
+
+
+def to_pascal_case(string):
+    return ''.join([w.title() for w in string.split('_')])
 
 
 class Command(BaseCommand):
@@ -15,7 +19,16 @@ class Command(BaseCommand):
 
         os.mkdir(project_name)
         os.mkdir(os.path.join(project_name, 'src'))
-        for file_name in glob.glob('{}/*.py'.format(template_dir)):
-            shutil.copy(file_name, project_name)
+
+        context = dict(
+            project_name=project_name,
+            lambda_prefix=to_pascal_case(project_name),
+        )
+        for file_path in glob.glob('{}/*.py'.format(template_dir)):
+            with open(file_path, 'r') as f:
+                content = f.read()
+            filename = os.path.split(file_path)[1]
+            with open(os.path.join(project_name, filename), 'w') as f:
+                f.write(Template(content).substitute(**context))
 
         print 'Project "{}" created'.format(project_name)
