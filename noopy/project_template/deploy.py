@@ -8,6 +8,7 @@ from StringIO import StringIO
 import boto3
 
 import settings
+from noopy.utils import to_pascal_case
 
 
 def main():
@@ -46,7 +47,7 @@ def create_function(zip_bytes, file_name):
     )
 
     print client.create_function(
-            FunctionName='{}{}'.format(function_prefix, file_name.capitalize()),
+            FunctionName='{}{}'.format(function_prefix, to_pascal_case(file_name)),
             Runtime='python2.7',
             Role=lambda_settings['Role'],
             Handler='{}.lambda_handler'.format(file_name),
