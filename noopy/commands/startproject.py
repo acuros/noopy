@@ -22,6 +22,8 @@ class Command(BaseCommand):
             project_name=project_name,
             lambda_prefix=to_pascal_case(project_name),
         )
+        context['account_id'] = raw_input('Input aws account id > ').strip()
+        context['role_arn'] = raw_input('Input role arn to be granted to lambda function > ').strip()
         for file_path in glob.glob('{}/*.py'.format(template_dir)):
             with open(file_path, 'r') as f:
                 content = f.read()

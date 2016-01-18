@@ -1,7 +1,9 @@
 PROJECT_NAME = '$project_name'
-ACCOUNT_ID = ''  # Your AWS account id
+ACCOUNT_ID = '$account_id'  # Your AWS account id
 LAMBDA = {
         'Prefix': '$lambda_prefix',  # Prefix for lambda function name
-        'Role': '',  # Role arn to be granted to lambda function
+        'Role': '$role_arn',  # Role arn to be granted to lambda function
 }
-ENDPOINTS = ['views']
+ENDPOINTS = [  # python files use noopy.endpoint.decorators.endpoint
+        'views'
+]
