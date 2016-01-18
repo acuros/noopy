@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import glob
+import importlib
 import os
 import sys
 import zipfile
@@ -7,6 +8,7 @@ from StringIO import StringIO
 
 import boto3
 import noopy
+from noopy.endpoint import Endpoint
 from noopy.utils import to_pascal_case
 
 import settings
@@ -14,9 +16,12 @@ import settings
 
 def main():
     target_dir = 'src'
-    names, zip_bytes = make_zip(target_dir)
-    for name in names:
-        create_function(zip_bytes, name.rstrip('.py'))
+    zip_bytes = make_zip(target_dir)
+    for endpoint in settings.ENDPOINTS:
+        importlib.import_module('src.{}'.format(endpoint))
+
+    for func in Endpoint.endpoints.values():
+        create_lambda_function(zip_bytes, func)
 
 
 def make_zip(target_dir):
@@ -43,11 +48,10 @@ def make_zip(target_dir):
     bytes_ = f.read()
     f.close()
 
-    srcs = [name for name in zip_file.namelist() if '/' not in name]
-    return srcs, bytes_
+    return bytes_
 
 
-def create_function(zip_bytes, file_name):
+def create_lambda_function(zip_bytes, func):
     lambda_settings = settings.LAMBDA
     client = boto3.client('lambda')
     function_prefix = 'arn:aws:lambda:{}:{}:{}'.format(
@@ -55,12 +59,13 @@ def create_function(zip_bytes, file_name):
             settings.ACCOUNT_ID,
             lambda_settings['Prefix']
     )
+    func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
 
     print client.create_function(
-            FunctionName='{}{}'.format(function_prefix, to_pascal_case(file_name)),
+            FunctionName='{}{}'.format(function_prefix, to_pascal_case(func.func_name)),
             Runtime='python2.7',
             Role=lambda_settings['Role'],
-            Handler='{}.lambda_handler'.format(file_name),
+            Handler='{}.{}'.format(func_module, func.func_name),
             Code={
                 'ZipFile': zip_bytes
             }
