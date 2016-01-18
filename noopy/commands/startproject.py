@@ -4,10 +4,7 @@ from string import Template
 
 import noopy
 from noopy.admin import BaseCommand
-
-
-def to_pascal_case(string):
-    return ''.join([w.title() for w in string.split('_')])
+from noopy.utils import to_pascal_case
 
 
 class Command(BaseCommand):
