@@ -1,11 +1,10 @@
+from collections import namedtuple
+
 from .resource import Resource
 
 
-class Endpoint(object):
+class Endpoint(namedtuple('Endpoint', ['path', 'method'])):
     endpoints = {}
 
     def __init__(self, path, method):
-        resource = Resource.resources.get(path)
-        if not resource:
-            resource = Resource(path)
-        self.resource = resource
+        self.resource = Resource(self.path)
