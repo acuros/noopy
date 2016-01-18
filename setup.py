@@ -13,13 +13,16 @@ setup(
         license='MIT License',
         author='Seungyeon Joshua Kim(Acuros)',
         author_email='acuroskr' '@' 'gmail.com',
+        test_require=[
+            'pytest'
+        ],
         install_requires=[
-          'boto3'
+            'boto3'
         ],
         entry_points={
-          'console_scripts': [
-              'noopy-admin=noopy.admin:main'
-          ]
+            'console_scripts': [
+                'noopy-admin=noopy.admin:main'
+            ]
         },
         classifiers=[
           'Development Status :: 2 - Pre-Alpha',
