@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 from string import Template
 
 import noopy
@@ -15,7 +16,7 @@ class Command(BaseCommand):
         template_dir = os.path.join(noopy.__path__[0], 'project_template')
 
         os.mkdir(project_name)
-        os.mkdir(os.path.join(project_name, 'src'))
+        shutil.copytree(os.path.join(template_dir, 'src'), '{}/src'.format(project_name))
 
         context = dict(
             project_name=project_name,
