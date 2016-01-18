@@ -6,9 +6,10 @@ import zipfile
 from StringIO import StringIO
 
 import boto3
+import noopy
+from noopy.utils import to_pascal_case
 
 import settings
-from noopy.utils import to_pascal_case
 
 
 def main():
@@ -30,11 +31,20 @@ def make_zip(target_dir):
     for file_name in file_names:
         zip_file.write(file_name, os.path.split(file_name)[1])
 
+    noopy_parent = os.path.split(noopy.__path__[0])[0]
+    for root, _, file_names in os.walk(noopy.__path__[0]):
+        for file_name in file_names:
+            full_path = os.path.join(root, file_name)
+            local_path = full_path[len(noopy_parent):]
+            zip_file.write(full_path, local_path)
+
     zip_file.close()
     f.seek(0)
     bytes_ = f.read()
     f.close()
-    return zip_file.namelist(), bytes_
+
+    srcs = [name for name in zip_file.namelist() if '/' not in name]
+    return srcs, bytes_
 
 
 def create_function(zip_bytes, file_name):
