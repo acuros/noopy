@@ -9,6 +9,7 @@ from StringIO import StringIO
 import boto3
 import noopy
 from noopy.endpoint import Endpoint
+from noopy.endpoint.resource import Resource
 from noopy.utils import to_pascal_case
 
 import settings
@@ -22,6 +23,7 @@ def main():
 
     for func in Endpoint.endpoints.values():
         create_lambda_function(zip_bytes, func)
+
 
 
 def make_zip(target_dir):
@@ -70,6 +72,39 @@ def create_lambda_function(zip_bytes, func):
                 'ZipFile': zip_bytes
             }
     )
+
+
+class ApiGatewayDeployer(object):
+    def __init__(self):
+        self.client = boto3.client('apigateway')
+        apis = self.client.get_rest_apis()['items']
+        filtered_apis = [api for api in apis if api['name'] == settings.PROJECT_NAME]
+        if filtered_apis:
+            self.api_id = filtered_apis[0]['id']
+        else:
+            self.api_id = self.client.create_rest_api(name=settings.PROJECT_NAME)['id']
+
+    def prepare_resources(self):
+        aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
+        aws_resource_by_path = dict((r['path'], r) for r in aws_resources)
+        for path, noopy_resource in Resource.resources.iteritems():
+            aws_resource = aws_resource_by_path.get(path)
+            if aws_resource:
+                noopy_resource.id = aws_resource['id']
+
+        self.create_omitted_resources(aws_resource_by_path.keys(), Resource.resources['/'])
+
+    def create_omitted_resources(self, exist_path, parent):
+        for child in parent.children:
+            if child.path not in exist_path:
+                created = self.client.create_resource(
+                        restApiId=self.api_id,
+                        parentId=parent.id,
+                        pathPart=child.path.split('/')[-1]
+                )
+                child.id = created['id']
+            if child.children:
+                self.create_omitted_resources(exist_path, child)
 
 
 if __name__ == '__main__':
