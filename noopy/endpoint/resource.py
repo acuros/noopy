@@ -12,9 +12,10 @@ class Resource(object):
     def __init__(self, path):
         self.path = self._validate_path(path)
         self.children = []
+        self.parent = None
         if self.path != '/':
             self.parent = self._resolve_parent(self.path)
-            Resource.resources[self.parent.path].register_child(self)
+            self.parent.register_child(self)
             Resource.resources[self.path] = self
 
     def register_child(self, child):
@@ -32,7 +33,7 @@ class Resource(object):
             if not parent_resource:
                 Resource.resources[parent_path] = Resource(parent_path)
                 parent_resource.register_child(Resource.resources[parent_path])
-        return '/{}'.format('/'.join(parents))
+        return Resource.resources['/{}'.format('/'.join(parents))]
 
     @staticmethod
     def _validate_path(path):
