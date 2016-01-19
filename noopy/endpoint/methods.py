@@ -10,5 +10,17 @@ class POST(BaseMethod):
     pass
 
 
-class OPTIONS(BaseMethod):
+class PUT(BaseMethod):
+    pass
+
+
+class DELETE(BaseMethod):
+    pass
+
+
+class PATCH(BaseMethod):
+    pass
+
+
+class HEAD(BaseMethod):
     pass
