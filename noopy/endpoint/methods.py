@@ -1,5 +1,10 @@
+class MethodType(type):
+    def __str__(self):
+        return str(self)
+
+
 class BaseMethod(object):
-    pass
+    __metaclass__ = MethodType
 
 
 class GET(BaseMethod):
