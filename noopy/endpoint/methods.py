@@ -1,6 +1,6 @@
 class MethodType(type):
     def __str__(self):
-        return str(self)
+        return self.__name__
 
 
 class BaseMethod(object):
