@@ -9,7 +9,7 @@ def endpoint(path, method):
         import settings
         lambda_settings = settings.LAMBDA
         client = boto3.client('lambda')
-        function_prefix = 'arn:aws:lambda:{}:{}:{}'.format(
+        function_prefix = 'arn:aws:lambda:{}:{}:function:{}'.format(
                 client._client_config.region_name,
                 settings.ACCOUNT_ID,
                 lambda_settings['Prefix']
