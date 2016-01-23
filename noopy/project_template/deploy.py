@@ -33,7 +33,7 @@ class LambdaDeployer(object):
             if f['FunctionName'].startswith(settings.LAMBDA['Prefix'])
         ]
         for func in Endpoint.endpoints.values():
-            if func.lambda_name in exist_functions:
+            if func.lambda_name in exist_functions:  # TODO: Control when user has lots of lambda functions
                 self._update_function(zip_bytes, func)
             else:
                 self._create_lambda_function(zip_bytes, func)
