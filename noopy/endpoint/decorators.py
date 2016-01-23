@@ -14,7 +14,9 @@ def endpoint(path, method):
                 settings.ACCOUNT_ID,
                 lambda_settings['Prefix']
         )
-        func.name_for_lambda = '{}{}'.format(function_prefix, to_pascal_case(func.func_name))
+        pascal_name = to_pascal_case(func.func_name)
+        func.arn = '{}{}'.format(function_prefix, pascal_name)
+        func.lambda_name = '{}{}'.format(lambda_settings['Prefix'], pascal_name)
         endpoint_ = Endpoint(path, method)
         Endpoint.endpoints[endpoint_] = func
         return func

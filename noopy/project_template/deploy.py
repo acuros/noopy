@@ -15,59 +15,88 @@ import settings
 
 
 def main():
-    target_dir = 'src'
-    zip_bytes = make_zip(target_dir)
-    for endpoint in settings.ENDPOINTS:
-        importlib.import_module('src.{}'.format(endpoint))
-
-    for func in Endpoint.endpoints.values():
-        create_lambda_function(zip_bytes, func)
-    ApiGatewayDeployer().deploy()
+    LambdaDeployer().deploy('src')
+    print ApiGatewayDeployer().deploy()
 
 
-def make_zip(target_dir):
-    f = StringIO()
-    zip_file = zipfile.ZipFile(f, 'w')
+class LambdaDeployer(object):
+    def __init__(self):
+        self.client = boto3.client('lambda')
 
-    file_names = glob.glob('{}/*.py'.format(target_dir))
-    if not file_names:
-        sys.stderr.write('There is no python file in src directory')
-        sys.exit(1)
+    def deploy(self, dir_):
+        self._discover_endpoints(dir_)
+        zip_bytes = self._make_zip(dir_)
 
-    for file_name in file_names:
-        zip_file.write(file_name, os.path.split(file_name)[1])
+        exist_functions = [
+            f['FunctionName']
+            for f in self.client.list_functions()['Functions']
+            if f['FunctionName'].startswith(settings.LAMBDA['Prefix'])
+        ]
+        for func in Endpoint.endpoints.values():
+            if func.lambda_name in exist_functions:
+                self._update_function(zip_bytes, func)
+            else:
+                self._create_lambda_function(zip_bytes, func)
 
-    noopy_parent = os.path.split(noopy.__path__[0])[0]
-    for root, _, file_names in os.walk(noopy.__path__[0]):
+    def _discover_endpoints(self, module):
+        for endpoint in settings.ENDPOINTS:
+            importlib.import_module('{}.{}'.format(module, endpoint))
+
+    def _make_zip(self, target_dir):
+        f = StringIO()
+        zip_file = zipfile.ZipFile(f, 'w')
+
+        file_names = glob.glob('{}/*.py'.format(target_dir))
+        if not file_names:
+            sys.stderr.write('There is no python file in src directory')
+            sys.exit(1)
+
         for file_name in file_names:
-            full_path = os.path.join(root, file_name)
-            local_path = full_path[len(noopy_parent):]
-            zip_file.write(full_path, local_path)
+            zip_file.write(file_name, os.path.split(file_name)[1])
 
-    zip_file.write('settings.py')
+        noopy_parent = os.path.split(noopy.__path__[0])[0]
+        for root, _, file_names in os.walk(noopy.__path__[0]):
+            for file_name in file_names:
+                full_path = os.path.join(root, file_name)
+                local_path = full_path[len(noopy_parent):]
+                zip_file.write(full_path, local_path)
 
-    zip_file.close()
-    f.seek(0)
-    bytes_ = f.read()
-    f.close()
+        zip_file.write('settings.py')
 
-    return bytes_
+        zip_file.close()
+        f.seek(0)
+        bytes_ = f.read()
+        f.close()
 
+        return bytes_
 
-def create_lambda_function(zip_bytes, func):
-    lambda_settings = settings.LAMBDA
-    client = boto3.client('lambda')
-    func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
+    def _update_function(self, zip_bytes, func):
+        lambda_settings = settings.LAMBDA
+        func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
 
-    client.create_function(
-            FunctionName=func.name_for_lambda,
-            Runtime='python2.7',
-            Role=lambda_settings['Role'],
-            Handler='{}.{}'.format(func_module, func.func_name),
-            Code={
-                'ZipFile': zip_bytes
-            }
-    )
+        self.client.update_function_code(
+                FunctionName=func.arn,
+                ZipFile=zip_bytes
+        )
+        self.client.update_function_configuration(
+                FunctionName=func.arn,
+                Role=lambda_settings['Role'],
+                Handler='{}.{}'.format(func_module, func.func_name),
+        )
+
+    def _create_lambda_function(self, zip_bytes, func):
+        lambda_settings = settings.LAMBDA
+        func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
+
+        self.client.create_function(
+                FunctionName=func.arn,
+                Runtime='python2.7',
+                Role=lambda_settings['Role'],
+                Handler='{}.{}'.format(func_module, func.func_name),
+                Code={
+                    'ZipFile': zip_bytes
+                }
+        )
 
 
 class ApiGatewayDeployer(object):
@@ -85,6 +114,10 @@ class ApiGatewayDeployer(object):
         self.deploy_resources()
         self.deploy_methods()
         self.deploy_stage()
+        return 'https://{}.execute-api.{}.amazonaws.com/prod'.format(
+            self.api_id,
+            self.client._client_config.region_name,
+        )
 
     def deploy_resources(self):
         aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
@@ -117,7 +150,7 @@ class ApiGatewayDeployer(object):
                 )
 
                 lambda_client.add_permission(
-                    FunctionName=func.name_for_lambda,
+                    FunctionName=func.arn,
                     StatementId='1',
                     Action='lambda:InvokeFunction',
                     Principal='apigateway.amazonaws.com',
@@ -125,7 +158,7 @@ class ApiGatewayDeployer(object):
                 )
                 uri = 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
                     self.client._client_config.region_name,
-                    func.name_for_lambda
+                    func.arn
                 )
                 self.client.put_integration(
                     restApiId=self.api_id,
