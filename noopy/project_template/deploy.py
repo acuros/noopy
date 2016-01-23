@@ -10,7 +10,6 @@ import boto3
 import noopy
 from noopy.endpoint import Endpoint
 from noopy.endpoint.resource import Resource
-from noopy.utils import to_pascal_case
 
 import settings
 
@@ -23,7 +22,7 @@ def main():
 
     for func in Endpoint.endpoints.values():
         create_lambda_function(zip_bytes, func)
-
+    ApiGatewayDeployer().deploy()
 
 
 def make_zip(target_dir):
@@ -45,6 +44,8 @@ def make_zip(target_dir):
             local_path = full_path[len(noopy_parent):]
             zip_file.write(full_path, local_path)
 
+    zip_file.write('settings.py')
+
     zip_file.close()
     f.seek(0)
     bytes_ = f.read()
@@ -56,15 +57,10 @@ def make_zip(target_dir):
 def create_lambda_function(zip_bytes, func):
     lambda_settings = settings.LAMBDA
     client = boto3.client('lambda')
-    function_prefix = 'arn:aws:lambda:{}:{}:{}'.format(
-            client._client_config.region_name,
-            settings.ACCOUNT_ID,
-            lambda_settings['Prefix']
-    )
     func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
 
-    print client.create_function(
-            FunctionName='{}{}'.format(function_prefix, to_pascal_case(func.func_name)),
+    client.create_function(
+            FunctionName=func.name_for_lambda,
             Runtime='python2.7',
             Role=lambda_settings['Role'],
             Handler='{}.{}'.format(func_module, func.func_name),
@@ -83,8 +79,14 @@ class ApiGatewayDeployer(object):
             self.api_id = filtered_apis[0]['id']
         else:
             self.api_id = self.client.create_rest_api(name=settings.PROJECT_NAME)['id']
+        self.aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
 
-    def prepare_resources(self):
+    def deploy(self):
+        self.deploy_resources()
+        self.deploy_methods()
+        self.deploy_stage()
+
+    def deploy_resources(self):
         aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
         aws_resource_by_path = dict((r['path'], r) for r in aws_resources)
         for path, noopy_resource in Resource.resources.iteritems():
@@ -94,6 +96,65 @@ class ApiGatewayDeployer(object):
 
         self.create_omitted_resources(aws_resource_by_path.keys(), Resource.resources['/'])
 
+    def deploy_methods(self):
+        aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
+        aws_resource_by_path = dict((r['path'], r) for r in aws_resources)
+        for endpoint, func in Endpoint.endpoints.iteritems():
+            method = str(endpoint.method)
+            aws_resource = aws_resource_by_path.get(endpoint.path)
+            if method not in aws_resource.get('resourceMethods', {}):
+                self.client.put_method(
+                    restApiId=self.api_id,
+                    resourceId=aws_resource['id'],
+                    httpMethod=method,
+                    authorizationType=''
+                )
+                lambda_client = boto3.client('lambda')
+                source_arn = 'arn:aws:execute-api:{}:{}:{}/*/GET/'.format(
+                    self.client._client_config.region_name,
+                    settings.ACCOUNT_ID,
+                    self.api_id
+                )
+
+                lambda_client.add_permission(
+                    FunctionName=func.name_for_lambda,
+                    StatementId='1',
+                    Action='lambda:InvokeFunction',
+                    Principal='apigateway.amazonaws.com',
+                    SourceArn=source_arn
+                )
+                uri = 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
+                    self.client._client_config.region_name,
+                    func.name_for_lambda
+                )
+                self.client.put_integration(
+                    restApiId=self.api_id,
+                    resourceId=aws_resource['id'],
+                    httpMethod=method,
+                    integrationHttpMethod='POST',
+                    type='AWS',
+                    uri=uri,
+                )
+                self.client.put_method_response(
+                    restApiId=self.api_id,
+                    resourceId=aws_resource['id'],
+                    httpMethod=method,
+                    statusCode='200',
+                    responseModels={
+                        'application/json': 'Empty'
+                    }
+                )
+                self.client.put_integration_response(
+                    restApiId=self.api_id,
+                    resourceId=aws_resource['id'],
+                    httpMethod=method,
+                    statusCode='200',
+                    selectionPattern=''
+                )
+
+    def deploy_stage(self):
+        self.client.create_deployment(restApiId=self.api_id, stageName='prod')
+
     def create_omitted_resources(self, exist_path, parent):
         for child in parent.children:
             if child.path not in exist_path:
@@ -102,6 +163,7 @@ class ApiGatewayDeployer(object):
                         parentId=parent.id,
                         pathPart=child.path.split('/')[-1]
                 )
+                self.aws_resources.append(created)
                 child.id = created['id']
             if child.children:
                 self.create_omitted_resources(exist_path, child)
