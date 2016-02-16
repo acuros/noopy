@@ -32,7 +32,6 @@ class Resource(object):
             parent_resource = Resource.resources.get(parent_path)
             if not parent_resource:
                 Resource.resources[parent_path] = Resource(parent_path)
-                parent_resource.register_child(Resource.resources[parent_path])
         return Resource.resources['/{}'.format('/'.join(parents))]
 
     @staticmethod
