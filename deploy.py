@@ -7,6 +7,8 @@ import zipfile
 from StringIO import StringIO
 
 import boto3
+from botocore.exceptions import ClientError
+
 import noopy
 from noopy.endpoint import Endpoint
 from noopy.endpoint.resource import Resource
@@ -16,15 +18,32 @@ import settings
 
 def main():
     LambdaDeployer().deploy('src')
-    ApiGatewayDeployer().deploy()
+    print ApiGatewayDeployer().deploy()
 
 
 class LambdaDeployer(object):
+    def __init__(self):
+        self.client = boto3.client('lambda')
+
     def deploy(self, dir_):
         self._discover_endpoints(dir_)
         zip_bytes = self._make_zip(dir_)
+
+        exist_functions = [
+            f['FunctionName']
+            for f in self.client.list_functions()['Functions']
+            if f['FunctionName'].startswith(settings.LAMBDA['Prefix'])
+        ]
+
+        names = set()
         for func in Endpoint.endpoints.values():
-            self._create_lambda_function(zip_bytes, func)
+            if func.lambda_name in names:
+                continue
+            names.add(func.lambda_name)
+            if func.lambda_name in exist_functions:  # TODO: Control when user has lots of lambda functions
+                self._update_function(zip_bytes, func)
+            else:
+                self._create_lambda_function(zip_bytes, func)
 
     def _discover_endpoints(self, module):
         for endpoint in settings.ENDPOINTS:
@@ -58,13 +77,26 @@ class LambdaDeployer(object):
 
         return bytes_
 
-    def _create_lambda_function(self, zip_bytes, func):
+    def _update_function(self, zip_bytes, func):
         lambda_settings = settings.LAMBDA
-        client = boto3.client('lambda')
         func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
 
-        client.create_function(
-                FunctionName=func.name_for_lambda,
+        self.client.update_function_code(
+                FunctionName=func.arn,
+                ZipFile=zip_bytes
+        )
+        self.client.update_function_configuration(
+                FunctionName=func.arn,
+                Role=lambda_settings['Role'],
+                Handler='{}.{}'.format(func_module, func.func_name),
+        )
+
+    def _create_lambda_function(self, zip_bytes, func):
+        lambda_settings = settings.LAMBDA
+        func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
+
+        self.client.create_function(
+                FunctionName=func.arn,
                 Runtime='python2.7',
                 Role=lambda_settings['Role'],
                 Handler='{}.{}'.format(func_module, func.func_name),
@@ -89,6 +121,10 @@ class ApiGatewayDeployer(object):
         self.deploy_resources()
         self.deploy_methods()
         self.deploy_stage()
+        return 'https://{}.execute-api.{}.amazonaws.com/prod'.format(
+            self.api_id,
+            self.client._client_config.region_name,
+        )
 
     def deploy_resources(self):
         aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
@@ -98,7 +134,7 @@ class ApiGatewayDeployer(object):
             if aws_resource:
                 noopy_resource.id = aws_resource['id']
 
-        self.create_omitted_resources(aws_resource_by_path.keys(), Resource.resources['/'])
+        self.create_omitted_resources(set(aws_resource_by_path.keys()), Resource.resources['/'])
 
     def deploy_methods(self):
         aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
@@ -114,22 +150,25 @@ class ApiGatewayDeployer(object):
                     authorizationType=''
                 )
                 lambda_client = boto3.client('lambda')
-                source_arn = 'arn:aws:execute-api:{}:{}:{}/*/GET/'.format(
+                source_arn = 'arn:aws:execute-api:{}:{}:{}/*/*/*'.format(
                     self.client._client_config.region_name,
                     settings.ACCOUNT_ID,
                     self.api_id
                 )
 
-                lambda_client.add_permission(
-                    FunctionName=func.name_for_lambda,
-                    StatementId='1',
-                    Action='lambda:InvokeFunction',
-                    Principal='apigateway.amazonaws.com',
-                    SourceArn=source_arn
-                )
+                try:
+                    lambda_client.add_permission(
+                        FunctionName=func.arn,
+                        StatementId='1',
+                        Action='lambda:InvokeFunction',
+                        Principal='apigateway.amazonaws.com',
+                        SourceArn=source_arn
+                    )
+                except ClientError:
+                    pass
                 uri = 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
                     self.client._client_config.region_name,
-                    func.name_for_lambda
+                    func.arn
                 )
                 self.client.put_integration(
                     restApiId=self.api_id,
@@ -167,6 +206,7 @@ class ApiGatewayDeployer(object):
                         parentId=parent.id,
                         pathPart=child.path.split('/')[-1]
                 )
+                exist_path.add(child.path)
                 self.aws_resources.append(created)
                 child.id = created['id']
             if child.children:
