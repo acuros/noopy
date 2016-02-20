@@ -39,7 +39,7 @@ class Resource(object):
         if not isinstance(path, basestring):
             raise TypeError('The type of resource must be instance of basestring')
 
-        resource_pattern = r'^/[~0-9a-zA-Z\+%@\./_-{}]*$'
+        resource_pattern = r'^/[~0-9a-zA-Z\+%@\./_\-{}]*$'
         if not re.match(resource_pattern, path):
             raise ValueError('Resource must satisfy regular express pattern: {}'.format(resource_pattern))
 
