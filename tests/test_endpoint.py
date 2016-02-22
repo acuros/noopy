@@ -1,7 +1,7 @@
 import pytest
 
 from noopy.endpoint import methods
-from noopy.endpoint.decorators import endpoint
+from noopy.decorators import endpoint
 
 
 def simple_view(event, context):

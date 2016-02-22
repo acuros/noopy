@@ -23,23 +23,24 @@ def deploy(settings_module):
 class LambdaDeployer(object):
     def __init__(self):
         self.client = boto3.client('lambda')
+        self.exist_function_names = set()
 
     def deploy(self, dir_):
         self._discover_endpoints(dir_)
         zip_bytes = self._make_zip(dir_)
 
-        exist_functions = [
+        self.exist_function_names = {
             f['FunctionName']
             for f in self.client.list_functions()['Functions']
             if f['FunctionName'].startswith(settings.LAMBDA['Prefix'])
-            ]
+        }
 
         names = set()
-        for func in Endpoint.endpoints.values():
+        for func in noopy.lambda_functions:
             if func.lambda_name in names:
                 continue
             names.add(func.lambda_name)
-            if func.lambda_name in exist_functions:  # TODO: Control when user has lots of lambda functions
+            if func.lambda_name in self.exist_function_names:  # TODO: Control when user has lots of lambda functions
                 self._update_function(zip_bytes, func)
             else:
                 self._create_lambda_function(zip_bytes, func)
