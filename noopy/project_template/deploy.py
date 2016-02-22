@@ -10,10 +10,13 @@ import boto3
 from botocore.exceptions import ClientError
 
 import noopy
+from noopy import settings
 from noopy.endpoint import Endpoint
 from noopy.endpoint.resource import Resource
 
-import settings
+import settings as project_settings
+
+settings.load_project_settings(project_settings)
 
 
 def main():

@@ -6,7 +6,7 @@ from noopy.endpoint import Endpoint
 
 def endpoint(path, method):
     def decorator(func):
-        import settings
+        from noopy import settings
         lambda_settings = settings.LAMBDA
         client = boto3.client('lambda')
         function_prefix = 'arn:aws:lambda:{}:{}:function:{}'.format(
