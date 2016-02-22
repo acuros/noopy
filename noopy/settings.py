@@ -2,6 +2,9 @@ ACCOUNT_ID = ''
 LAMBDA = {
     'Prefix': ''
 }
+ENDPOINTS = [
+
+]
 
 
 def load_project_settings(settings_module):
