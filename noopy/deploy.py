@@ -46,7 +46,7 @@ class LambdaDeployer(object):
                 self._create_lambda_function(zip_bytes, func)
 
     def _discover_endpoints(self, module):
-        for endpoint in settings.ENDPOINTS:
+        for endpoint in settings.LAMBDA_MODULES:
             importlib.import_module('{}.{}'.format(module, endpoint))
 
     def _make_zip(self, target_dir):
@@ -118,6 +118,8 @@ class ApiGatewayDeployer(object):
         self.aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
 
     def deploy(self):
+        if not Endpoint.endpoints:
+            return
         self.deploy_resources()
         self.deploy_methods()
         self.deploy_stage()

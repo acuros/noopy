@@ -2,7 +2,7 @@ ACCOUNT_ID = ''
 LAMBDA = {
     'Prefix': ''
 }
-ENDPOINTS = [
+LAMBDA_MODULES = [
 
 ]
 

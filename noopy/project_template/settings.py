@@ -4,6 +4,6 @@ LAMBDA = {
         'Prefix': '$lambda_prefix',  # Prefix for lambda function name
         'Role': '$role_arn',  # Role arn to be granted to lambda function
 }
-ENDPOINTS = [  # python files use noopy.endpoint.decorators.endpoint
+LAMBDA_MODULES = [  # python files use noopy.endpoint.decorators.endpoint
         'views'
 ]
