@@ -15,6 +15,7 @@ from noopy.endpoint.resource import Resource
 
 
 def deploy(settings_module):
+    sys.path.append(os.path.join(os.getcwd(), 'src'))
     settings.load_project_settings(settings_module)
     LambdaDeployer().deploy('src')
     print ApiGatewayDeployer().deploy()
@@ -53,13 +54,14 @@ class LambdaDeployer(object):
         f = StringIO()
         zip_file = zipfile.ZipFile(f, 'w')
 
-        file_names = glob.glob('{}/*.py'.format(target_dir))
-        if not file_names:
-            sys.stderr.write('There is no python file in src directory')
-            sys.exit(1)
+        for root, dirs, files in os.walk(target_dir):
+            for file_ in files:
+                full_path = os.path.join(root, file_)
+                zip_file.write(full_path, full_path[len(target_dir):])
 
-        for file_name in file_names:
-            zip_file.write(file_name, os.path.split(file_name)[1])
+        if not zip_file.filelist:
+            sys.stderr.write('There is no file in src directory')
+            sys.exit(1)
 
         noopy_parent = os.path.split(noopy.__path__[0])[0]
         for root, _, file_names in os.walk(noopy.__path__[0]):
