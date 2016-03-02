@@ -5,6 +5,8 @@ LAMBDA = {
 LAMBDA_MODULES = [
 
 ]
+PACKAGE_REQUIREMENTS = [
+]
 
 
 def load_project_settings(settings_module):

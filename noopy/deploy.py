@@ -1,6 +1,8 @@
 import glob
 import importlib
 import os
+import pip
+import shutil
 import sys
 import zipfile
 from StringIO import StringIO
@@ -63,21 +65,36 @@ class LambdaDeployer(object):
             sys.stderr.write('There is no file in src directory')
             sys.exit(1)
 
-        noopy_parent = os.path.split(noopy.__path__[0])[0]
-        for root, _, file_names in os.walk(noopy.__path__[0]):
-            for file_name in file_names:
-                full_path = os.path.join(root, file_name)
-                local_path = full_path[len(noopy_parent):]
-                zip_file.write(full_path, local_path)
-
+        packages = reduce(lambda x, y: x | self._requirements(y), set(settings.PACKAGE_REQUIREMENTS), set())
+        for package_name in packages:
+            module = importlib.import_module(package_name)
+            module_path = module.__path__[0] if module.__path__ else module.__file__[:-1]
+            module_parent_dir = os.path.dirname(module_path)
+            if not module.__path__:
+                zip_file.write(module_path, module_path[len(module_parent_dir):])
+                continue
+            for root, _, file_names in os.walk(module.__path__[0]):
+                for file_name in file_names:
+                    full_path = os.path.join(root, file_name)
+                    local_path = full_path[len(module_parent_dir):]
+                    zip_file.write(full_path, local_path)
         zip_file.write('settings.py')
-
         zip_file.close()
+
         f.seek(0)
         bytes_ = f.read()
         f.close()
 
         return bytes_
+
+    def _requirements(self, package_name):
+        def _get_package(_package_name):
+            return [p for p in pip.get_installed_distributions() if p.project_name == _package_name][0]
+        package = _get_package(package_name)
+        result = set(name for name in package._get_metadata("top_level.txt") if '/' not in name)
+        for requirement in package.requires():
+            result |= self._requirements(requirement.project_name)
+        return result
 
     def _update_function(self, zip_bytes, func):
         lambda_settings = settings.LAMBDA
