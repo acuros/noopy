@@ -1,16 +1,16 @@
-import glob
 import importlib
+import json
 import os
-import pip
-import shutil
 import sys
+import uuid
 import zipfile
 from StringIO import StringIO
 
 import boto3
+import pip
 from botocore.exceptions import ClientError
+from noopy.utils import to_pascal_case
 
-import noopy
 from noopy import settings
 from noopy.endpoint import Endpoint
 from noopy.endpoint.resource import Resource
@@ -19,34 +19,38 @@ from noopy.endpoint.resource import Resource
 def deploy(settings_module):
     sys.path.append(os.path.join(os.getcwd(), 'src'))
     settings.load_project_settings(settings_module)
-    LambdaDeployer().deploy('src')
-    print ApiGatewayDeployer().deploy()
+
+    client = boto3.client('lambda')
+    function_arn = 'arn:aws:lambda:{}:{}:function:{}'.format(
+        client._client_config.region_name,
+        settings.ACCOUNT_ID,
+        settings.LAMBDA['Prefix']
+    )
+
+    LambdaDeployer(function_arn).deploy('src')
+    print ApiGatewayDeployer(function_arn).deploy()
 
 
 class LambdaDeployer(object):
-    def __init__(self):
+    def __init__(self, function_arn):
         self.client = boto3.client('lambda')
-        self.exist_function_names = set()
+        self.function_name = settings.LAMBDA['Prefix']
+        self.function_arn = function_arn
 
     def deploy(self, dir_):
         self._discover_endpoints(dir_)
+
         zip_bytes = self._make_zip(dir_)
 
-        self.exist_function_names = {
+        exist_function_names = {
             f['FunctionName']
             for f in self.client.list_functions()['Functions']
-            if f['FunctionName'].startswith(settings.LAMBDA['Prefix'])
         }
 
-        names = set()
-        for func in noopy.lambda_functions:
-            if func.lambda_name in names:
-                continue
-            names.add(func.lambda_name)
-            if func.lambda_name in self.exist_function_names:  # TODO: Control when user has lots of lambda functions
-                self._update_function(zip_bytes, func)
-            else:
-                self._create_lambda_function(zip_bytes, func)
+        if to_pascal_case(self.function_name) in exist_function_names:  # TODO: Control when user has lots of lambda functions
+            self._update_function(zip_bytes)
+        else:
+            self._create_lambda_function(zip_bytes)
 
     def _discover_endpoints(self, module):
         for endpoint in settings.LAMBDA_MODULES:
@@ -66,6 +70,7 @@ class LambdaDeployer(object):
             sys.exit(1)
 
         packages = reduce(lambda x, y: x | self._requirements(y), set(settings.PACKAGE_REQUIREMENTS), set())
+        packages -= {'boto3', 'botocore'}
         for package_name in packages:
             module = importlib.import_module(package_name)
             module_path = module.__path__[0] if module.__path__ else module.__file__[:-1]
@@ -96,29 +101,27 @@ class LambdaDeployer(object):
             result |= self._requirements(requirement.project_name)
         return result
 
-    def _update_function(self, zip_bytes, func):
+    def _update_function(self, zip_bytes):
         lambda_settings = settings.LAMBDA
-        func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
 
         self.client.update_function_code(
-            FunctionName=func.arn,
+            FunctionName=self.function_arn,
             ZipFile=zip_bytes
         )
         self.client.update_function_configuration(
-            FunctionName=func.arn,
+            FunctionName=self.function_arn,
             Role=lambda_settings['Role'],
-            Handler='{}.{}'.format(func_module, func.func_name),
+            Handler='dispatcher.dispatch'
         )
 
-    def _create_lambda_function(self, zip_bytes, func):
+    def _create_lambda_function(self, zip_bytes):
         lambda_settings = settings.LAMBDA
-        func_module = os.path.split(func.func_code.co_filename)[1].split('.')[0]
 
         self.client.create_function(
-            FunctionName=func.arn,
+            FunctionName=self.function_arn,
             Runtime='python2.7',
             Role=lambda_settings['Role'],
-            Handler='{}.{}'.format(func_module, func.func_name),
+            Handler='dispatcher.dispatch',
             Code={
                 'ZipFile': zip_bytes
             }
@@ -126,7 +129,8 @@ class LambdaDeployer(object):
 
 
 class ApiGatewayDeployer(object):
-    def __init__(self):
+    def __init__(self, function_arn):
+        self.function_arn = function_arn
         self.client = boto3.client('apigateway')
         apis = self.client.get_rest_apis()['items']
         filtered_apis = [api for api in apis if api['name'] == settings.PROJECT_NAME]
@@ -179,8 +183,8 @@ class ApiGatewayDeployer(object):
 
                 try:
                     lambda_client.add_permission(
-                        FunctionName=func.arn,
-                        StatementId='1',
+                        FunctionName=self.function_arn,
+                        StatementId=str(uuid.uuid1()),
                         Action='lambda:InvokeFunction',
                         Principal='apigateway.amazonaws.com',
                         SourceArn=source_arn
@@ -189,13 +193,22 @@ class ApiGatewayDeployer(object):
                     pass
                 uri = 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
                     self.client._client_config.region_name,
-                    func.arn
+                    self.function_arn
                 )
+                template = {
+                    'path': '$context.resourcePath',
+                    'method': '$context.httpMethod',
+                    'params': '$input.params(\'$\')',
+                    'type': 'APIGateway'
+                }
                 self.client.put_integration(
                     restApiId=self.api_id,
                     resourceId=aws_resource['id'],
                     httpMethod=method,
                     integrationHttpMethod='POST',
+                    requestTemplates={
+                      'application/json': json.dumps(template)
+                    },
                     type='AWS',
                     uri=uri,
                 )

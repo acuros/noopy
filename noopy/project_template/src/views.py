@@ -1,4 +1,4 @@
-from noopy.endpoint.decorators import endpoint
+from noopy.decorators import endpoint
 from noopy.endpoint.methods import GET
 
 

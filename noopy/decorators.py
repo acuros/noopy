@@ -6,20 +6,6 @@ from noopy.utils import to_pascal_case
 
 
 def lambda_function(func):
-    from noopy import settings
-    lambda_settings = settings.LAMBDA
-    client = boto3.client('lambda')
-    function_prefix = 'arn:aws:lambda:{}:{}:function:{}'.format(
-        client._client_config.region_name,
-        settings.ACCOUNT_ID,
-        lambda_settings['Prefix']
-    )
-    pascal_name = to_pascal_case(func.func_name)
-    func.arn = '{}{}'.format(function_prefix, pascal_name)
-    func.lambda_name = '{}{}'.format(
-        lambda_settings['Prefix'],
-        pascal_name
-    )
     lambda_functions.append(func)
     return func
 
