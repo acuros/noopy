@@ -14,5 +14,4 @@ def dispatch(event, context):
         path = event['path']
         method = getattr(methods, event['method'])
         endpoint = Endpoint.endpoints[Endpoint(path, method)]
-
-        return endpoint(event.get('params', dict()), context)
+        return endpoint(event.get('params', {}), context)

@@ -1,5 +1,4 @@
 import importlib
-import json
 import os
 import sys
 import uuid
@@ -45,7 +44,7 @@ class LambdaDeployer(object):
         exist_function_names = {
             f['FunctionName']
             for f in self.client.list_functions()['Functions']
-        }
+            }
 
         if to_pascal_case(self.function_name) in exist_function_names:  # TODO: Control when user has lots of lambda functions
             self._update_function(zip_bytes)
@@ -95,6 +94,7 @@ class LambdaDeployer(object):
     def _requirements(self, package_name):
         def _get_package(_package_name):
             return [p for p in pip.get_installed_distributions() if p.project_name == _package_name][0]
+
         package = _get_package(package_name)
         result = set(name for name in package._get_metadata("top_level.txt") if '/' not in name)
         for requirement in package.requires():
@@ -195,19 +195,15 @@ class ApiGatewayDeployer(object):
                     self.client._client_config.region_name,
                     self.function_arn
                 )
-                template = {
-                    'path': '$context.resourcePath',
-                    'method': '$context.httpMethod',
-                    'params': '$input.params(\'$\')',
-                    'type': 'APIGateway'
-                }
+                template = '{"path": "$context.resourcePath", "method": "$context.httpMethod",' \
+                           '"params": $input.json(\'$\'), "type": "APIGateway"}'
                 self.client.put_integration(
                     restApiId=self.api_id,
                     resourceId=aws_resource['id'],
                     httpMethod=method,
                     integrationHttpMethod='POST',
                     requestTemplates={
-                      'application/json': json.dumps(template)
+                        'application/json': template
                     },
                     type='AWS',
                     uri=uri,
