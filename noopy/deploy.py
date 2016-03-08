@@ -27,7 +27,7 @@ def deploy(settings_module):
     )
 
     LambdaDeployer(function_arn).deploy('src')
-    print ApiGatewayDeployer(function_arn).deploy()
+    print ApiGatewayDeployer(function_arn).deploy('src')
 
 
 class LambdaDeployer(object):
@@ -37,23 +37,17 @@ class LambdaDeployer(object):
         self.function_arn = function_arn
 
     def deploy(self, dir_):
-        self._discover_endpoints(dir_)
-
         zip_bytes = self._make_zip(dir_)
 
         exist_function_names = {
             f['FunctionName']
             for f in self.client.list_functions()['Functions']
-            }
+        }
 
         if to_pascal_case(self.function_name) in exist_function_names:  # TODO: Control when user has lots of lambda functions
             self._update_function(zip_bytes)
         else:
             self._create_lambda_function(zip_bytes)
-
-    def _discover_endpoints(self, module):
-        for endpoint in settings.LAMBDA_MODULES:
-            importlib.import_module('{}.{}'.format(module, endpoint))
 
     def _make_zip(self, target_dir):
         f = StringIO()
@@ -62,7 +56,7 @@ class LambdaDeployer(object):
         for root, dirs, files in os.walk(target_dir):
             for file_ in files:
                 full_path = os.path.join(root, file_)
-                zip_file.write(full_path, full_path[len(target_dir):])
+                zip_file.write(full_path)
 
         if not zip_file.filelist:
             sys.stderr.write('There is no file in src directory')
@@ -83,6 +77,7 @@ class LambdaDeployer(object):
                     local_path = full_path[len(module_parent_dir):]
                     zip_file.write(full_path, local_path)
         zip_file.write('settings.py')
+        zip_file.write('dispatcher.py')
         zip_file.close()
 
         f.seek(0)
@@ -140,7 +135,8 @@ class ApiGatewayDeployer(object):
             self.api_id = self.client.create_rest_api(name=settings.PROJECT_NAME)['id']
         self.aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
 
-    def deploy(self):
+    def deploy(self, dir_):
+        self._discover_endpoints(dir_)
         if not Endpoint.endpoints:
             return
         self.deploy_resources()
@@ -241,3 +237,7 @@ class ApiGatewayDeployer(object):
                 child.id = created['id']
             if child.children:
                 self.create_omitted_resources(exist_path, child)
+
+    def _discover_endpoints(self, module):
+        for lambda_module in settings.LAMBDA_MODULES:
+            importlib.import_module(lambda_module)
