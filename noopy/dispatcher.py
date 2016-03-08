@@ -4,6 +4,8 @@ from noopy.endpoint import methods
 
 
 def dispatch(event, context):
+    print event
+
     if event['type'] == 'APIGateway':
         path = event['path']
         method = getattr(methods, event['method'])
