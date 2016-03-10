@@ -15,26 +15,28 @@ from noopy.endpoint import Endpoint
 from noopy.endpoint.resource import Resource
 
 
-def deploy(settings_module):
+def deploy(settings_module, stage='prod'):
     sys.path.append(os.path.join(os.getcwd(), 'src'))
     settings.load_project_settings(settings_module)
 
     client = boto3.client('lambda')
+    func_name = to_pascal_case('{}{}'.format(settings.LAMBDA['Prefix'], stage))
     function_arn = 'arn:aws:lambda:{}:{}:function:{}'.format(
         client._client_config.region_name,
         settings.ACCOUNT_ID,
-        settings.LAMBDA['Prefix']
+        func_name
     )
 
-    LambdaDeployer(function_arn).deploy('src')
-    print ApiGatewayDeployer(function_arn).deploy('src')
+    LambdaDeployer(function_arn, stage).deploy('src')
+    print ApiGatewayDeployer(function_arn, stage).deploy('src')
 
 
 class LambdaDeployer(object):
-    def __init__(self, function_arn):
+    def __init__(self, function_arn, stage):
         self.client = boto3.client('lambda')
-        self.function_name = settings.LAMBDA['Prefix']
+        self.stage = stage
         self.function_arn = function_arn
+        self.function_name = function_arn.split(':')[-1]
 
     def deploy(self, dir_):
         zip_bytes = self._make_zip(dir_)
@@ -78,6 +80,10 @@ class LambdaDeployer(object):
                     zip_file.write(full_path, local_path)
         zip_file.write('settings.py')
         zip_file.write('dispatcher.py')
+
+        stage_settings = '{}_settings.py'.format(self.stage)
+        if os.path.isfile(stage_settings):
+            zip_file.write(stage_settings, 'local_settings.py')
         zip_file.close()
 
         f.seek(0)
@@ -124,8 +130,10 @@ class LambdaDeployer(object):
 
 
 class ApiGatewayDeployer(object):
-    def __init__(self, function_arn):
+    def __init__(self, function_arn, stage):
         self.function_arn = function_arn
+        self.stage = stage
+
         self.client = boto3.client('apigateway')
         apis = self.client.get_rest_apis()['items']
         filtered_apis = [api for api in apis if api['name'] == settings.PROJECT_NAME]
@@ -142,9 +150,10 @@ class ApiGatewayDeployer(object):
         self.deploy_resources()
         self.deploy_methods()
         self.deploy_stage()
-        return 'https://{}.execute-api.{}.amazonaws.com/prod'.format(
+        return 'https://{}.execute-api.{}.amazonaws.com/{}'.format(
             self.api_id,
             self.client._client_config.region_name,
+            self.stage
         )
 
     def deploy_resources(self):
@@ -222,7 +231,7 @@ class ApiGatewayDeployer(object):
                 )
 
     def deploy_stage(self):
-        self.client.create_deployment(restApiId=self.api_id, stageName='prod')
+        self.client.create_deployment(restApiId=self.api_id, stageName=self.stage)
 
     def create_omitted_resources(self, exist_path, parent):
         for child in parent.children:

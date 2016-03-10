@@ -1,6 +1,12 @@
 #!/usr/bin/python
+import sys
+
 from noopy import deploy
 import settings
 
 if __name__ == '__main__':
-    deploy.deploy(settings)
+    if len(sys.argv) == 1:
+        stage = sys.argv[1]
+    else:
+        stage = 'prod'
+    deploy.deploy(settings, stage)
