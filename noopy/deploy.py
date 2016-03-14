@@ -83,7 +83,7 @@ class LambdaDeployer(object):
 
         stage_settings = '{}_settings.py'.format(self.stage)
         if os.path.isfile(stage_settings):
-            zip_file.write(stage_settings, 'local_settings.py')
+            zip_file.write(stage_settings, 'local_noopy_settings.py')
         zip_file.close()
 
         f.seek(0)
