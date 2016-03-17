@@ -1,6 +1,6 @@
 import pytest
 
-from noopy.cron.schedule import RateEventRule, BaseEventRule, TimeEventRule
+from noopy.cron.rule import RateEventRule, BaseEventRule, TimeEventRule
 
 
 @pytest.fixture

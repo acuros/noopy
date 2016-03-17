@@ -1,8 +1,6 @@
 class BaseEventRule(object):
     rules = dict()
-
-    def __init__(self, name):
-        self.rules[name] = self
+    functions = []
 
     @property
     def expression(self):
