@@ -147,6 +147,8 @@ class ApiGatewayDeployer(object):
         self._discover_endpoints(dir_)
         if not Endpoint.endpoints:
             return
+        self.add_permision()
+
         self.deploy_resources()
         self.deploy_methods()
         self.deploy_stage()
@@ -167,68 +169,73 @@ class ApiGatewayDeployer(object):
         self.create_omitted_resources(set(aws_resource_by_path.keys()), Resource.resources['/'])
 
     def deploy_methods(self):
-        aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
-        aws_resource_by_path = dict((r['path'], r) for r in aws_resources)
+        resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
+        resources_by_path = dict((r['path'], r) for r in resources)
+
         for endpoint, func in Endpoint.endpoints.iteritems():
             method = str(endpoint.method)
-            aws_resource = aws_resource_by_path.get(endpoint.path)
+            aws_resource = resources_by_path.get(endpoint.path)
             if method not in aws_resource.get('resourceMethods', {}):
-                self.client.put_method(
-                    restApiId=self.api_id,
-                    resourceId=aws_resource['id'],
-                    httpMethod=method,
-                    authorizationType=''
-                )
-                lambda_client = boto3.client('lambda')
-                source_arn = 'arn:aws:execute-api:{}:{}:{}/*/*/*'.format(
-                    self.client._client_config.region_name,
-                    settings.ACCOUNT_ID,
-                    self.api_id
-                )
+                self._deploy_method(aws_resource, method)
 
-                try:
-                    lambda_client.add_permission(
-                        FunctionName=self.function_arn,
-                        StatementId=str(uuid.uuid1()),
-                        Action='lambda:InvokeFunction',
-                        Principal='apigateway.amazonaws.com',
-                        SourceArn=source_arn
-                    )
-                except ClientError:
-                    pass
-                uri = 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
-                    self.client._client_config.region_name,
-                    self.function_arn
-                )
-                template = '{"path": "$context.resourcePath", "method": "$context.httpMethod",' \
-                           '"params": $input.json(\'$\'), "type": "APIGateway"}'
-                self.client.put_integration(
-                    restApiId=self.api_id,
-                    resourceId=aws_resource['id'],
-                    httpMethod=method,
-                    integrationHttpMethod='POST',
-                    requestTemplates={
-                        'application/json': template
-                    },
-                    type='AWS',
-                    uri=uri,
-                )
-                self.client.put_method_response(
-                    restApiId=self.api_id,
-                    resourceId=aws_resource['id'],
-                    httpMethod=method,
-                    statusCode='200',
-                    responseModels={
-                        'application/json': 'Empty'
-                    }
-                )
-                self.client.put_integration_response(
-                    restApiId=self.api_id,
-                    resourceId=aws_resource['id'],
-                    httpMethod=method,
-                    statusCode='200',
-                    selectionPattern=''
-                )
+    def _deploy_method(self, resource, method):
+        self.client.put_method(
+            restApiId=self.api_id,
+            resourceId=resource['id'],
+            httpMethod=method,
+            authorizationType=''
+        )
+        uri = 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
+            self.client._client_config.region_name,
+            self.function_arn
+        )
+        template = '{"path": "$context.resourcePath", "method": "$context.httpMethod",' \
+                   '"params": $input.json(\'$\'), "type": "APIGateway"}'
+        self.client.put_integration(
+            restApiId=self.api_id,
+            resourceId=resource['id'],
+            httpMethod=method,
+            integrationHttpMethod='POST',
+            requestTemplates={
+                'application/json': template
+            },
+            type='AWS',
+            uri=uri,
+        )
+        self.client.put_method_response(
+            restApiId=self.api_id,
+            resourceId=resource['id'],
+            httpMethod=method,
+            statusCode='200',
+            responseModels={
+                'application/json': 'Empty'
+            }
+        )
+        self.client.put_integration_response(
+            restApiId=self.api_id,
+            resourceId=resource['id'],
+            httpMethod=method,
+            statusCode='200',
+            selectionPattern=''
+        )
+
+    def add_permision(self):
+        lambda_client = boto3.client('lambda')
+        source_arn = 'arn:aws:execute-api:{}:{}:{}/*/*/*'.format(
+            self.client._client_config.region_name,
+            settings.ACCOUNT_ID,
+            self.api_id
+        )
+        try:
+            lambda_client.add_permission(
+                FunctionName=self.function_arn,
+                StatementId=str(uuid.uuid1()),
+                Action='lambda:InvokeFunction',
+                Principal='apigateway.amazonaws.com',
+                SourceArn=source_arn
+            )
+        except ClientError:
+            pass
 
     def deploy_stage(self):
         self.client.create_deployment(restApiId=self.api_id, stageName=self.stage)
