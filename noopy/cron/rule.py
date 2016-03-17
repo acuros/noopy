@@ -1,6 +1,8 @@
 class BaseEventRule(object):
     rules = dict()
+
     functions = []
+    name = ''
 
     @property
     def expression(self):
@@ -20,8 +22,6 @@ class RateEventRule(BaseEventRule):
         if unit not in units:
             raise ValueError('Parameter "unit" must be one of %s' % ','.join(units))
 
-        super(RateEventRule, self).__init__(name)
-
         self.name = name
         self.value = value
         self.unit = unit
@@ -35,8 +35,6 @@ class TimeEventRule(BaseEventRule):
     def __init__(self, name, pattern):
         if not isinstance(pattern, basestring):
             raise TypeError('Parameter "expression" must be type of "string", not "%s"' % str(type(pattern)))
-
-        super(TimeEventRule, self).__init__(name)
 
         self.name = name
         self.pattern = pattern

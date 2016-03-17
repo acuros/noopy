@@ -39,6 +39,7 @@ def cron(rule):
 
     def decorator(func):
         func = lambda_function(func)
+        BaseEventRule.rules[rule.name] = rule
         rule.functions.append(func)
         return func
 
