@@ -143,6 +143,13 @@ class ApiGatewayDeployer(object):
             self.api_id = self.client.create_rest_api(name=settings.PROJECT_NAME)['id']
         self.aws_resources = self.client.get_resources(restApiId=self.api_id, limit=500)['items']
 
+    @property
+    def function_uri(self):
+        return 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
+            self.client._client_config.region_name,
+            self.function_arn
+        )
+
     def deploy(self, dir_):
         self._discover_endpoints(dir_)
         if not Endpoint.endpoints:
@@ -174,20 +181,32 @@ class ApiGatewayDeployer(object):
 
         for endpoint, func in Endpoint.endpoints.iteritems():
             method = str(endpoint.method)
-            aws_resource = resources_by_path.get(endpoint.path)
-            if method not in aws_resource.get('resourceMethods', {}):
-                self._deploy_method(aws_resource, method)
+            resource = resources_by_path.get(endpoint.path)
+            if method in resource.get('resourceMethods', {}):
+                self._update_integration(resource, method)
+            else:
+                self._put_method(resource, method)
 
-    def _deploy_method(self, resource, method):
+    def _update_integration(self, resource, method):
+        self.client.update_integration(
+            restApiId=self.api_id,
+            resourceId=resource['id'],
+            httpMethod=method,
+            patchOperations=[
+                {
+                    'op': 'replace',
+                    'path': '/uri',
+                    'value': self.function_uri
+                }
+            ]
+        )
+
+    def _put_method(self, resource, method):
         self.client.put_method(
             restApiId=self.api_id,
             resourceId=resource['id'],
             httpMethod=method,
             authorizationType=''
-        )
-        uri = 'arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations'.format(
-            self.client._client_config.region_name,
-            self.function_arn
         )
         template = '{"path": "$context.resourcePath", "method": "$context.httpMethod",' \
                    '"params": $input.json(\'$\'), "type": "APIGateway"}'
@@ -200,7 +219,7 @@ class ApiGatewayDeployer(object):
                 'application/json': template
             },
             type='AWS',
-            uri=uri,
+            uri=self.function_uri,
         )
         self.client.put_method_response(
             restApiId=self.api_id,
