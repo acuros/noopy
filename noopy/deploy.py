@@ -8,6 +8,8 @@ from StringIO import StringIO
 import boto3
 import pip
 from botocore.exceptions import ClientError
+
+from noopy.cron.rule import BaseEventRule
 from noopy.utils import to_pascal_case
 
 from noopy import settings
@@ -29,13 +31,15 @@ def deploy(settings_module, stage='prod'):
 
     LambdaDeployer(function_arn, stage).deploy('src')
     print ApiGatewayDeployer(function_arn, stage).deploy('src')
+    EventRuleDeployer()
 
 
 class LambdaDeployer(object):
+    client = boto3.client('lambda')
+
     def __init__(self, function_arn, stage):
-        self.client = boto3.client('lambda')
-        self.stage = stage
         self.function_arn = function_arn
+        self.stage = stage
         self.function_name = function_arn.split(':')[-1]
 
     def deploy(self, dir_):
@@ -68,9 +72,10 @@ class LambdaDeployer(object):
         packages -= {'boto3', 'botocore'}
         for package_name in packages:
             module = importlib.import_module(package_name)
-            module_path = module.__path__[0] if module.__path__ else module.__file__[:-1]
+            has_module_path = hasattr(module, '__path__') and module.__path__
+            module_path = module.__path__[0] if has_module_path else module.__file__[:-1]
             module_parent_dir = os.path.dirname(module_path)
-            if not module.__path__:
+            if not has_module_path:
                 zip_file.write(module_path, module_path[len(module_parent_dir):])
                 continue
             for root, _, file_names in os.walk(module.__path__[0]):
@@ -151,7 +156,7 @@ class ApiGatewayDeployer(object):
         )
 
     def deploy(self, dir_):
-        self._discover_endpoints(dir_)
+        self._discover_endpoints()
         if not Endpoint.endpoints:
             return
         self.add_permision()
@@ -273,6 +278,25 @@ class ApiGatewayDeployer(object):
             if child.children:
                 self.create_omitted_resources(exist_path, child)
 
-    def _discover_endpoints(self, module):
+    @staticmethod
+    def _discover_endpoints():
         for lambda_module in settings.LAMBDA_MODULES:
             importlib.import_module(lambda_module)
+
+
+class EventRuleDeployer(object):
+    client = boto3.client('events')
+
+    def deploy(self):
+        existing_rules = self.client.list_rules()['Rules']  # TODO: Fetch all using NextToken
+        existing_names = [r['Name'] for r in existing_rules]
+
+        for rule in BaseEventRule.rules:
+            if rule.name in existing_names:
+                pass
+            else:
+                self._put_rule(rule)
+
+    def _put_rule(self, rule):
+        self.client.put_rule(Name=rule.name, ScheduleExpression=rule.expression)
+
