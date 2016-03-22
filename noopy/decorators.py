@@ -1,9 +1,6 @@
-import boto3
-
 from noopy import lambda_functions
 from noopy.cron.rule import BaseEventRule
 from noopy.endpoint import Endpoint
-from noopy.utils import to_pascal_case
 
 
 def lambda_function(func):
