@@ -17,7 +17,8 @@ setup(
             'pytest'
         ],
         install_requires=[
-            'boto3'
+            'boto3',
+            'pip'
         ],
         entry_points={
             'console_scripts': [
