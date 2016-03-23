@@ -76,7 +76,10 @@ class LambdaDeployer(object):
 
     def _requirements(self, package_name):
         def _get_package(_package_name):
-            return [p for p in pip.get_installed_distributions() if p.project_name == _package_name][0]
+            candidates = [p for p in pip.get_installed_distributions() if p.project_name == _package_name]
+            if not candidates:
+                raise ValueError('No package "{}"'.format(package_name))
+            return candidates[0]
 
         package = _get_package(package_name)
         result = set(name for name in package._get_metadata("top_level.txt") if '/' not in name)
