@@ -34,12 +34,9 @@ class EventRuleDeployer(object):
         existing_rules = self.client.list_rules()['Rules']  # TODO: Fetch all using NextToken
         existing_names = [r['Name'] for r in existing_rules]
 
-        for rule in BaseEventRule.rules:
-            if rule.name in existing_names:
+        for rule_name, rule in BaseEventRule.rules.items():
+            if rule_name in existing_names:
                 pass
             else:
-                self._put_rule(rule)
-
-    def _put_rule(self, rule):
-        self.client.put_rule(Name=rule.name, ScheduleExpression=rule.expression)
+                self.client.put_rule(Name=rule.name, ScheduleExpression=rule.expression, State='ENABLED')
 
