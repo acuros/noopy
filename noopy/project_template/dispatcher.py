@@ -16,4 +16,6 @@ def dispatch(event, context):
         funcs = [f for f in lambda_functions if f.func_name == event['function_name']]
         if len(funcs) != 1:
             raise ValueError('One and only one function "{}" needed.'.format(event['function_name']))
-        funcs[0](event.get('params', {}), context)
+        return funcs[0](event.get('params', {}), context)
+
+    raise ValueError('Undefined type: "%s"' % event['type'])
