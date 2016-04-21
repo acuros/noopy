@@ -27,7 +27,7 @@ class LambdaDeployer(object):
             for f in self.client.list_functions()['Functions']
         }
 
-        if to_pascal_case(self.function_name) in exist_function_names:  # TODO: Control when user has lots of lambda functions
+        if self.function_name in exist_function_names:  # TODO: Control when user has lots of lambda functions
             self._update_function(zip_bytes)
         else:
             self._create_lambda_function(zip_bytes)
