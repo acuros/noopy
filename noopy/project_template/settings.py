@@ -5,7 +5,7 @@ LAMBDA = {
     'Role': '$role_arn',  # Role arn to be granted to lambda function
 }
 LAMBDA_MODULES = [  # python files use noopy.endpoint.decorators.endpoint
-    'views'
+    'src.views'
 ]
 PACKAGE_REQUIREMENTS = [
     'noopy'
