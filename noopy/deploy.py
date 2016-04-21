@@ -15,7 +15,7 @@ def deploy(settings_module, stage='prod'):
     settings.load_project_settings(settings_module)
 
     client = boto3.client('lambda')
-    func_name = to_pascal_case('{}{}'.format(settings.LAMBDA['Prefix'], stage))
+    func_name = '{}{}'.format(settings.LAMBDA['Prefix'], to_pascal_case(stage))
     function_arn = 'arn:aws:lambda:{}:{}:function:{}'.format(
         client._client_config.region_name,
         settings.ACCOUNT_ID,
