@@ -23,8 +23,13 @@ def deploy(settings_module, stage='prod'):
     )
 
     LambdaDeployer(function_arn, stage).deploy('src')
-    print ApiGatewayDeployer(function_arn, stage).deploy('src')
-    EventRuleDeployer().deploy()
+    print 'Lambda deployed'
+    api_gateway_url = ApiGatewayDeployer(function_arn, stage).deploy('src')
+    if api_gateway_url:
+        print 'API Gateway URL: {}'.format(api_gateway_url)
+    deployed_names = EventRuleDeployer().deploy()
+    if deployed_names:
+        print 'Deployed Event Rules:\n\t{}'.format('\n\t'.join(deployed_names))
 
 
 class EventRuleDeployer(object):
@@ -33,10 +38,14 @@ class EventRuleDeployer(object):
     def deploy(self):
         existing_rules = self.client.list_rules()['Rules']  # TODO: Fetch all using NextToken
         existing_names = [r['Name'] for r in existing_rules]
+        deployed_rule_names = []
 
         for rule_name, rule in BaseEventRule.rules.items():
             if rule_name in existing_names:
                 pass
             else:
                 self.client.put_rule(Name=rule.name, ScheduleExpression=rule.expression, State='ENABLED')
+                deployed_rule_names.append(rule_name)
+
+        return deployed_rule_names
 
